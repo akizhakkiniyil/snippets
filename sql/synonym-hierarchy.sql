@@ -5,7 +5,7 @@ WITH dependency_tree (
     referenced_owner,
     referenced_name,
     referenced_type,
-    level,
+    dependency_level,  -- Renamed from LEVEL
     path
 ) AS (
     -- Anchor member: Start with all synonyms in the specified schema
@@ -16,7 +16,7 @@ WITH dependency_tree (
         s.table_owner,
         s.table_name,
         (SELECT object_type FROM all_objects WHERE owner = s.table_owner AND object_name = s.table_name AND ROWNUM = 1) AS referenced_type,
-        1 AS level,
+        1 AS dependency_level, -- Renamed from LEVEL
         s.owner || '.' || s.synonym_name AS path
     FROM
         all_synonyms s
@@ -33,7 +33,7 @@ WITH dependency_tree (
         d.referenced_owner,
         d.referenced_name,
         d.referenced_type,
-        dt.level + 1,
+        dt.dependency_level + 1, -- Renamed from LEVEL
         dt.path || ' -> ' || d.owner || '.' || d.name AS path
     FROM
         all_dependencies d
@@ -51,7 +51,7 @@ WITH dependency_tree (
         s.table_owner,
         s.table_name,
         (SELECT object_type FROM all_objects WHERE owner = s.table_owner AND object_name = s.table_name AND ROWNUM = 1) AS referenced_type,
-        dt.level + 1,
+        dt.dependency_level + 1, -- Renamed from LEVEL
         dt.path || ' -> ' || s.owner || '.' || s.synonym_name AS path
     FROM
         all_synonyms s
@@ -61,8 +61,8 @@ WITH dependency_tree (
 )
 CYCLE path SET is_cycle TO 'Y' DEFAULT 'N'
 SELECT
-    **level**,
-    LPAD(' ', (**level** - 1) * 2) || object_owner || '.' || object_name || ' (' || object_type || ')' AS dependency_hierarchy,
+    dependency_level, -- Renamed from LEVEL
+    LPAD(' ', (dependency_level - 1) * 2) || object_owner || '.' || object_name || ' (' || object_type || ')' AS dependency_hierarchy,
     referenced_owner || '.' || referenced_name || ' (' || referenced_type || ')' AS "REFERENCES"
 FROM
     dependency_tree
