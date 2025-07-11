@@ -5,7 +5,7 @@ WITH dependency_tree (
     referenced_owner,
     referenced_name,
     referenced_type,
-    dependency_level,  -- Renamed from LEVEL
+    dependency_level,
     path
 ) AS (
     -- Anchor member: Start with all synonyms in the specified schema
@@ -16,7 +16,7 @@ WITH dependency_tree (
         s.table_owner,
         s.table_name,
         (SELECT object_type FROM all_objects WHERE owner = s.table_owner AND object_name = s.table_name AND ROWNUM = 1) AS referenced_type,
-        1 AS dependency_level, -- Renamed from LEVEL
+        1 AS dependency_level,
         s.owner || '.' || s.synonym_name AS path
     FROM
         all_synonyms s
@@ -25,43 +25,46 @@ WITH dependency_tree (
 
     UNION ALL
 
-    -- Recursive member: Find objects that depend on the previous level's objects
-    SELECT
-        d.owner,
-        d.name,
-        d.type,
-        d.referenced_owner,
-        d.referenced_name,
-        d.referenced_type,
-        dt.dependency_level + 1, -- Renamed from LEVEL
-        dt.path || ' -> ' || d.owner || '.' || d.name AS path
-    FROM
-        all_dependencies d
-    JOIN
-        dependency_tree dt ON d.referenced_owner = dt.object_owner
-                           AND d.referenced_name = dt.object_name
+    -- Combined recursive member
+    (
+        -- This part finds standard objects (views, etc.) that depend on an object from the previous level
+        SELECT
+            d.owner,
+            d.name,
+            d.type,
+            d.referenced_owner,
+            d.referenced_name,
+            d.referenced_type,
+            dt.dependency_level + 1,
+            dt.path || ' -> ' || d.owner || '.' || d.name AS path
+        FROM
+            all_dependencies d
+        JOIN
+            dependency_tree dt ON d.referenced_owner = dt.object_owner
+                               AND d.referenced_name = dt.object_name
 
-    UNION ALL
+        UNION ALL
 
-    -- Recursive member for synonyms: If a referenced object is a synonym, resolve it
-    SELECT
-        s.owner,
-        s.synonym_name,
-        'SYNONYM' AS object_type,
-        s.table_owner,
-        s.table_name,
-        (SELECT object_type FROM all_objects WHERE owner = s.table_owner AND object_name = s.table_name AND ROWNUM = 1) AS referenced_type,
-        dt.dependency_level + 1, -- Renamed from LEVEL
-        dt.path || ' -> ' || s.owner || '.' || s.synonym_name AS path
-    FROM
-        all_synonyms s
-    JOIN
-        dependency_tree dt ON s.owner = dt.referenced_owner
-                           AND s.synonym_name = dt.referenced_name
+        -- This part specifically resolves a nested synonym if it's the next object in the chain
+        SELECT
+            s.owner,
+            s.synonym_name,
+            'SYNONYM' AS object_type,
+            s.table_owner,
+            s.table_name,
+            (SELECT object_type FROM all_objects WHERE owner = s.table_owner AND object_name = s.table_name AND ROWNUM = 1) AS referenced_type,
+            dt.dependency_level + 1,
+            dt.path || ' -> ' || s.owner || '.' || s.synonym_name AS path
+        FROM
+            all_synonyms s
+        JOIN
+            dependency_tree dt ON s.owner = dt.referenced_owner
+                               AND s.synonym_name = dt.referenced_name
+    )
 )
 CYCLE path SET is_cycle TO 'Y' DEFAULT 'N'
 SELECT
-    dependency_level, -- Renamed from LEVEL
+    dependency_level,
     LPAD(' ', (dependency_level - 1) * 2) || object_owner || '.' || object_name || ' (' || object_type || ')' AS dependency_hierarchy,
     referenced_owner || '.' || referenced_name || ' (' || referenced_type || ')' AS "REFERENCES"
 FROM
@@ -70,6 +73,7 @@ WHERE
     is_cycle = 'N'
 ORDER BY
     path;
+
 -------------------------------------------------------------------
 ---- Description --------------------------------------------------
 -------------------------------------------------------------------
