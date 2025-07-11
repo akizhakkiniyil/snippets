@@ -27,7 +27,7 @@ BEGIN
     -- 1. Anchor: Find all synonyms in the target schema and add them to the processing list.
     FOR r_syn IN (
         SELECT owner, synonym_name, table_owner, table_name
-        FROM all_synonyms
+        FROM dba_synonyms
         WHERE owner = v_target_schema
     )
     LOOP
@@ -80,7 +80,7 @@ BEGIN
         IF l_current_node.type = 'SYNONYM' THEN
             FOR r_syn_dep IN (
                 SELECT table_owner, table_name
-                FROM all_synonyms
+                FROM dba_synonyms
                 WHERE owner = l_current_node.owner AND synonym_name = l_current_node.name
             )
             LOOP
