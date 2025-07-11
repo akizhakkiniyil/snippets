@@ -24,7 +24,7 @@ DECLARE
     l_current_node      r_dependency_node;
     l_node_key          VARCHAR2(512);
     l_mview_query       CLOB;
-    l_search_name       VARCHAR2(200);
+    l_search_pattern    VARCHAR2(256);
 
 BEGIN
     -- 1. Anchor: Find all synonyms in the target schema to start the trace.
@@ -61,7 +61,9 @@ BEGIN
 
         -- Mark the object as processed to prevent infinite loops
         l_processed_keys(l_node_key) := l_current_node;
-        l_search_name := ' ' || UPPER(l_current_node.name) || ' '; -- Prepare for case-insensitive, whole-word search
+        -- Create a regular expression to find the object name as a whole word, case-insensitive
+        l_search_pattern := '(^|[^A-Z0-9_])' || UPPER(l_current_node.name) || '($|[^A-Z0-9_])';
+
 
         -- 3. Find the next level of dependents from THREE different paths.
 
@@ -106,7 +108,6 @@ BEGIN
         END LOOP;
         
         -- PATH C: Manually scan Materialized View source code for references.
-        -- This finds dependencies that are not recorded in dba_dependencies.
         FOR r_mview IN (SELECT owner, mview_name FROM dba_mviews)
         LOOP
             DECLARE
@@ -114,16 +115,17 @@ BEGIN
             BEGIN
                 -- Avoid re-checking an MView we've already processed
                 IF NOT l_processed_keys.EXISTS(v_mview_key) THEN
-                    -- Get the MView's defining query
-                    SELECT TO_LOB(query) INTO l_mview_query FROM dba_mviews 
+                    -- **FIX 1**: Correctly select the LONG into a CLOB variable.
+                    SELECT query INTO l_mview_query FROM dba_mviews 
                     WHERE owner = r_mview.owner AND mview_name = r_mview.mview_name;
 
-                    -- Check if the query text contains the name of the current object
-                    IF INSTR(UPPER(' ' || l_mview_query || ' '), l_search_name) > 0 THEN
+                    -- Check if the query text contains the name of the current object using REGEXP
+                    IF REGEXP_INSTR(UPPER(l_mview_query), l_search_pattern) > 0 THEN
                         l_to_process(v_mview_key).owner := r_mview.owner;
                         l_to_process(v_mview_key).name  := r_mview.mview_name;
                         l_to_process(v_mview_key).type  := 'MATERIALIZED VIEW';
-                        l_to_process(v_m_key).level := l_current_node.level + 1;
+                        -- **FIX 2**: Corrected typo from v_m_key to v_mview_key
+                        l_to_process(v_mview_key).level := l_current_node.level + 1;
                         l_to_process(v_mview_key).reason := 'Source code uses ' || l_current_node.name;
                     END IF;
                 END IF;
