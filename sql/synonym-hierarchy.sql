@@ -5,7 +5,7 @@ WITH dependency_tree (
     referenced_owner,
     referenced_name,
     referenced_type,
-    LEVEL,
+    level,
     path
 ) AS (
     -- Anchor member: Start with all synonyms in the specified schema
@@ -15,14 +15,16 @@ WITH dependency_tree (
         'SYNONYM' AS object_type,
         s.table_owner,
         s.table_name,
-        'TABLE' AS referenced_type, -- Initial assumption, will be corrected in recursive part
-        1,
+        (SELECT object_type FROM all_objects WHERE owner = s.table_owner AND object_name = s.table_name AND ROWNUM = 1) AS referenced_type,
+        1 AS level,
         s.owner || '.' || s.synonym_name AS path
     FROM
-        dba_synonyms s
+        all_synonyms s
     WHERE
         s.owner = 'YOUR_SCHEMA_NAME'
+
     UNION ALL
+
     -- Recursive member: Find objects that depend on the previous level's objects
     SELECT
         d.owner,
@@ -34,19 +36,13 @@ WITH dependency_tree (
         dt.level + 1,
         dt.path || ' -> ' || d.owner || '.' || d.name AS path
     FROM
-        dba_dependencies d
+        all_dependencies d
     JOIN
         dependency_tree dt ON d.referenced_owner = dt.object_owner
                            AND d.referenced_name = dt.object_name
-    WHERE
-        (d.owner, d.name) NOT IN (
-            SELECT
-                owner,
-                synonym_name
-            FROM
-                dba_synonyms
-        ) -- Avoid circular references with synonyms already in the path
+
     UNION ALL
+
     -- Recursive member for synonyms: If a referenced object is a synonym, resolve it
     SELECT
         s.owner,
@@ -54,19 +50,19 @@ WITH dependency_tree (
         'SYNONYM' AS object_type,
         s.table_owner,
         s.table_name,
-        'TABLE' AS referenced_type,
+        (SELECT object_type FROM all_objects WHERE owner = s.table_owner AND object_name = s.table_name AND ROWNUM = 1) AS referenced_type,
         dt.level + 1,
         dt.path || ' -> ' || s.owner || '.' || s.synonym_name AS path
     FROM
-        dba_synonyms s
+        all_synonyms s
     JOIN
         dependency_tree dt ON s.owner = dt.referenced_owner
                            AND s.synonym_name = dt.referenced_name
 )
 CYCLE path SET is_cycle TO 'Y' DEFAULT 'N'
 SELECT
-    LEVEL,
-    LPAD(' ', (LEVEL - 1) * 2) || object_owner || '.' || object_name || ' (' || object_type || ')' AS dependency_hierarchy,
+    **level**,
+    LPAD(' ', (**level** - 1) * 2) || object_owner || '.' || object_name || ' (' || object_type || ')' AS dependency_hierarchy,
     referenced_owner || '.' || referenced_name || ' (' || referenced_type || ')' AS "REFERENCES"
 FROM
     dependency_tree
@@ -97,6 +93,7 @@ dependency_hierarchy: Shows the dependent object, indented to represent its posi
 
 "REFERENCES": Shows the object that is being referenced.
 
+    
 Prerequisites
 
 To run this script successfully, your database user must have SELECT privileges on dba_synonyms and dba_dependencies. If you do not have these privileges, you can request them from your database administrator or use the all_ views (all_synonyms, all_dependencies) which will limit the search to objects you have access to.
