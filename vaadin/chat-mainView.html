@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>vaadin MainVeiw </title>
+	<meta name="generator" content="BBEdit 15.5">
+</head>
+<body>
+    <h1>Vaadin Main view and dependant files</h1>
+    <h2>MainView Java </h2>
+    <pre></pr><code>
+package com.example.application.views.main;
+
+import com.vaadin.flow.component.UI;
+import com.vaadin.flow.component.html.Div;
+import com.vaadin.flow.component.html.H1;
+import com.vaadin.flow.component.html.Image;
+import com.vaadin.flow.component.icon.Icon;
+import com.vaadin.flow.component.icon.VaadinIcon;
+import com.vaadin.flow.component.messages.MessageInput;
+import com.vaadin.flow.component.messages.MessageList;
+import com.vaadin.flow.component.messages.MessageListItem;
+import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
+import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.router.PageTitle;
+import com.vaadin.flow.router.Route;
+import com.vaadin.flow.theme.Theme;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+
+@PageTitle("Chatbot")
+@Route(value = "")
+// Apply custom styles from the 'frontend/themes/my-app/styles.css' file
+@Theme(value = "my-app") 
+public class MainView extends VerticalLayout {
+
+    private final MessageList chatWindow = new MessageList();
+    private final List<MessageListItem> messages = new ArrayList<>();
+    private final UI ui;
+
+    public MainView() {
+        this.ui = UI.getCurrent();
+
+        // --- Logo and Header ---
+        Image logo = new Image("images/logo.png", "My App Logo");
+        logo.setHeight("50px");
+        H1 title = new H1("Responsive Chatbot");
+        HorizontalLayout header = new HorizontalLayout(logo, title);
+        header.setAlignItems(Alignment.CENTER);
+        header.setSpacing(true);
+        header.setWidth("100%");
+
+        // --- Initial Chatbot Message (Right Aligned) ---
+        MessageListItem initialMessage = createBotMessage("Hello! How can I help you today?");
+        messages.add(initialMessage);
+        chatWindow.setItems(messages);
+
+        // --- Message Input ---
+        MessageInput messageInput = new MessageInput();
+        messageInput.setWidth("100%");
+        messageInput.addSubmitListener(this::onMessage);
+
+        // --- Layout Configuration ---
+        setSizeFull();
+        add(header, chatWindow, messageInput);
+        expand(chatWindow); // Make the chat window expand and scroll
+        setPadding(false);
+        setSpacing(false);
+    }
+
+    private void onMessage(MessageInput.SubmitEvent event) {
+        // --- Add User Message (Left Aligned) ---
+        final MessageListItem userMessage = createUserMessage(event.getValue());
+        messages.add(userMessage);
+        updateChat();
+
+        // --- Add Jumping Dots Visual Cue ---
+        final MessageListItem thinkingMessage = createThinkingMessage();
+        messages.add(thinkingMessage);
+        updateChat();
+
+        // --- Simulate Bot Response Asynchronously ---
+        CompletableFuture.runAsync(() -> {
+            try {
+                // Simulate network delay or processing time
+                Thread.sleep(2000); 
+                String botResponseText = "I received your message: \"" + event.getValue() + "\"";
+
+                // Update UI from the background thread
+                ui.access(() -> {
+                    messages.remove(thinkingMessage); // Remove jumping dots
+                    messages.add(createBotMessage(botResponseText)); // Add actual response
+                    updateChat();
+                });
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+    }
+
+    private MessageListItem createUserMessage(String text) {
+        final MessageListItem message = new MessageListItem(text, Instant.now(), "You");
+        message.setUserAvatar(new Icon(VaadinIcon.USER));
+        message.addClassName("user-message"); // CSS class for left alignment
+        return message;
+    }
+
+    private MessageListItem createBotMessage(String text) {
+        final MessageListItem message = new MessageListItem(text, Instant.now(), "Chatbot");
+        message.setUserAvatar(new Icon(VaadinIcon.AUTOMATION));
+        message.addClassName("bot-message"); // CSS class for right alignment
+        return message;
+    }
+    
+    private MessageListItem createThinkingMessage() {
+        // Create the jumping dots animation
+        Div dots = new Div();
+        dots.addClassName("jumping-dots");
+        dots.add(new Div(), new Div(), new Div());
+
+        final MessageListItem message = new MessageListItem(dots, Instant.now(), "Chatbot");
+        message.setUserAvatar(new Icon(VaadinIcon.AUTOMATION));
+        message.addClassName("bot-message"); // Align with other bot messages
+        return message;
+    }
+
+    private void updateChat() {
+        chatWindow.setItems(new ArrayList<>(messages));
+        // Scroll to the bottom to show the latest message
+        chatWindow.getElement().executeJs("this.scrollTop = this.scrollHeight");
+    }
+}   
+    </code></pre>
+<h2> Custom CSS for Styling</h2>
+You need to create a CSS file to handle the message alignment and the "jumping dots" animation.
+<ul>
+    <li>Navigate to the src/main/resources/frontend/themes/ directory in your project.</li>
+    <li>Create a new folder named my-app (to match the @Theme("my-app") annotation).</li>
+    <li>Inside my-app, create a file named styles.css.</li>
+    <li>Paste the following CSS code into styles.css:
+    <pre><code>
+        /* Make the message list a flex container to allow alignment */
+vaadin-message-list::part(list) {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Style for user messages on the left */
+.user-message {
+    align-self: flex-start;
+}
+
+/* Style for bot messages on the right */
+.bot-message {
+    align-self: flex-end;
+}
+
+/* Jumping dots animation container */
+.jumping-dots {
+    display: flex;
+    padding: 1rem 0;
+    justify-content: center;
+}
+
+/* Individual dot styling */
+.jumping-dots div {
+    width: 8px;
+    height: 8px;
+    background-color: #a0a0a0;
+    border-radius: 50%;
+    margin: 0 4px;
+    animation: jump 1.4s infinite;
+}
+
+/* Animation delays for each dot */
+.jumping-dots div:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.jumping-dots div:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+/* Keyframe animation for the jumping effect */
+@keyframes jump {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-10px);
+    }
+}
+    </code></pre>
+    </li>
+    <li></li>
+</ul>
+    <h3>Summary of changes</h3>
+    <ul>
+        <li>Responsive Alignment: By adding the .user-message and .bot-message classes and using align-self in CSS, the messages now correctly align to the left and right. The parent vaadin-message-list is configured as a flex container to enable this.</li>
+        <li>Visual Cue 🤖: When you send a message, a "jumping dots" animation appears on the right. This is achieved by adding a temporary MessageListItem that contains a Div with the CSS animation.</li>
+        <li>Asynchronous Handling: The use of CompletableFuture simulates a non-blocking call. This ensures the UI remains responsive and doesn't freeze while waiting for the chatbot's reply. The UI is safely updated from the background thread using ui.access().</li>
+        <li>Auto-Scrolling: The updateChat() method now includes a small JavaScript execution to automatically scroll the chat window to the bottom, keeping the latest message in view.</li>
+        <li>Theming: The @Theme annotation links the Java view to the custom CSS file, allowing for advanced styling.</li>
+    </ul>
+</body>
+</html>
+
+Building a Classic Chatbot Interface with Vaadin's MainView
+This guide provides a comprehensive walkthrough to create a visually appealing and functional chatbot interface within a Vaadin MainView. The layout will feature a prominent logo at the top, a scrollable chat window displaying interactions with distinct user and chatbot icons, and a text input field for user queries.
+
+Final Application Structure
+
+The completed application will have the following structure:
+
+MainView: The primary container for the entire chat interface, utilizing a VerticalLayout for top-to-bottom component arrangement.
+
+Header: A HorizontalLayout at the top of the MainView to display the application logo and title.
+
+Chat Window: A MessageList component to dynamically display the conversation history.
+
+Message Bubbles: Individual MessageListItem objects within the MessageList, customized to differentiate between user and chatbot messages with unique icons.
+
+Input Area: A MessageInput component at the bottom for users to type and submit their messages.
+
+Step-by-Step Implementation
+
+Here is the Vaadin Java code to construct the chatbot interface. This code can be placed within your project's MainView.java file.
+
+Key Components and Concepts
+
+VerticalLayout and HorizontalLayout: These are fundamental layout components in Vaadin for arranging other UI elements either vertically or horizontally.
+
+Image: This component is used to display the application's logo. Ensure you place your logo.png file in the src/main/resources/META-INF/resources/images/ directory of your project.
+
+MessageList: This component is specifically designed to display a list of messages, making it ideal for a chat interface.
+
+MessageListItem: Each message in the MessageList is a MessageListItem. This object allows you to set the message text, timestamp, sender's name, and an avatar.
+
+setUserAvatar(Component): This method of MessageListItem is crucial for displaying the user and chatbot icons. We use Vaadin's built-in Icon component with VaadinIcon enums (VaadinIcon.USER and VaadinIcon.AUTOMATION). You can also use the setUserImage(String url) method to set an image from a URL.
+
+MessageInput: This component provides a user-friendly input field with a send button, simplifying the process of capturing user input.
+
+Event Handling: The addSubmitListener on the MessageInput component allows you to define the logic that executes when a user sends a message.
+
+Dynamic Updates: To ensure the MessageList refreshes with new messages, it's good practice to provide it with a new List instance.
+
+This example provides a solid foundation for building more advanced chatbot functionalities, such as integrating with a natural language processing (NLP) service for more intelligent responses.
